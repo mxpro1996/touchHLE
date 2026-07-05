@@ -1417,7 +1417,7 @@ pub const CLASSES: ClassExports = objc_classes! {
            range:(NSRange)range
   remainingRange:(MutPtr<NSRange>)remaining_range_ptr {
 
-    let rust_str = ns_string::to_rust_string(env, this);
+    let rust_str = to_rust_string(env, this);
     let utf16: Vec<u16> = rust_str.encode_utf16().collect();
 
     let loc = range.location;
