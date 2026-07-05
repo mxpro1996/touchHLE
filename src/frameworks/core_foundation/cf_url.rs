@@ -11,6 +11,11 @@
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::CFIndex;
 use crate::dyld::{export_c_func, FunctionExports};
+use crate::frameworks::core_foundation::{
+    cf_array::CFArrayRef,
+    cf_data::{CFDataCreate, CFDataRef},
+    cf_dictionary::CFDictionaryRef,
+};
 use crate::frameworks::core_foundation::cf_string::{
     kCFStringEncodingASCII, CFStringConvertEncodingToNSStringEncoding, CFStringEncoding,
     CFStringRef,
