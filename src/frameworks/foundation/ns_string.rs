@@ -1387,6 +1387,140 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// Dummy stub for 'initWithBytesNoCopy'
+- (id)initWithBytesNoCopy:(ConstPtr<u8>)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)free_when_done {
+    if bytes.is_null() || len == 0 {
+        return msg![env; this init];
+    }
+
+    let slice = env.mem.bytes_at(bytes, len);
+    let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
+
+    *env.objc.borrow_mut::<StringHostObject>(this) = host_object;
+
+    if free_when_done {
+        log_dbg!("initWithBytesNoCopy: freeWhenDone is true, freeing guest buffer");
+        env.mem.free(bytes.cast_void().cast_mut());
+    }
+
+    this
+}
+
+- (bool)getBytes:(MutPtr<u8>)buffer
+       maxLength:(GuestUSize)max_len
+      usedLength:(MutPtr<GuestUSize>)used_len_ptr
+        encoding:(NSUInteger)encoding
+         options:(NSUInteger)options
+           range:(NSRange)range
+  remainingRange:(MutPtr<NSRange>)remaining_range_ptr {
+
+    let rust_str = ns_string::to_rust_string(env, this);
+    let utf16: Vec<u16> = rust_str.encode_utf16().collect();
+
+    let loc = range.location;
+    let len = range.length;
+    let total = utf16.len() as GuestUSize;
+
+    let in_bounds = loc <= total && len <= total - loc;
+    if !in_bounds {
+        log!("[getBytes:] NSRange {{{}, {}}} exceeded length {}", loc, len, total);
+        if !used_len_ptr.is_null() { env.mem.write(used_len_ptr, 0); }
+        if !remaining_range_ptr.is_null() { env.mem.write(remaining_range_ptr, range); }
+        return false;
+    }
+
+    let slice = &utf16[loc as usize .. (loc + len) as usize];
+
+    let chars: Vec<(char, GuestUSize)> = std::char::decode_utf16(slice.iter().copied())
+        .map(|r| {
+            let c = r.unwrap_or(std::char::REPLACEMENT_CHARACTER);
+            (c, c.len_utf16() as GuestUSize)
+        })
+        .collect();
+
+    let lossy = options & 0x1 != 0;
+
+    const NS_ASCII: NSUInteger = 1;
+    const NS_UTF8: NSUInteger = 4;
+    const NS_UNICODE: NSUInteger = 10;
+    const NS_UTF16BE: NSUInteger = 0x90000100;
+    const NS_UTF16LE: NSUInteger = 0x94000100;
+
+    fn encode_char(c: char, encoding: NSUInteger, lossy: bool) -> Option<Vec<u8>> {
+        match encoding {
+            NS_UTF8 => {
+                let mut buf = [0u8; 4];
+                Some(c.encode_utf8(&mut buf).as_bytes().to_vec())
+            }
+            NS_ASCII => {
+                if (c as u32) < 0x80 {
+                    Some(vec![c as u8])
+                } else if lossy {
+                    Some(vec![b'?'])
+                } else {
+                    None
+                }
+            }
+            NS_UNICODE | NS_UTF16LE => {
+                let mut units = [0u16; 2];
+                let n = c.encode_utf16(&mut units).len();
+                let mut out = Vec::with_capacity(n * 2);
+                for u in &units[..n] { out.extend_from_slice(&u.to_le_bytes()); }
+                Some(out)
+            }
+            NS_UTF16BE => {
+                let mut units = [0u16; 2];
+                let n = c.encode_utf16(&mut units).len();
+                let mut out = Vec::with_capacity(n * 2);
+                for u in &units[..n] { out.extend_from_slice(&u.to_be_bytes()); }
+                Some(out)
+            }
+            _ => None,
+        }
+    }
+
+    if !matches!(encoding, NS_ASCII | NS_UTF8 | NS_UNICODE | NS_UTF16BE | NS_UTF16LE) {
+        log!("[getBytes:] unsupported encoding {:#x}", encoding);
+        if !used_len_ptr.is_null() { env.mem.write(used_len_ptr, 0); }
+        if !remaining_range_ptr.is_null() { env.mem.write(remaining_range_ptr, range); }
+        return false;
+    }
+
+    let mut out_bytes: Vec<u8> = Vec::new();
+    let mut consumed_units: GuestUSize = 0;
+
+    for (c, units) in chars {
+        match encode_char(c, encoding, lossy) {
+            Some(bytes) => {
+                if out_bytes.len() + bytes.len() > max_len as usize {
+                    break; 
+                }
+                out_bytes.extend_from_slice(&bytes);
+                consumed_units += units;
+            }
+            None => break, 
+        }
+    }
+
+    let used_len = out_bytes.len() as GuestUSize;
+
+    if !buffer.is_null() && used_len > 0 {
+        env.mem.bytes_at_mut(buffer, used_len).copy_from_slice(&out_bytes);
+    }
+    if !used_len_ptr.is_null() {
+        env.mem.write(used_len_ptr, used_len);
+    }
+    if !remaining_range_ptr.is_null() {
+        let remaining = NSRange { location: loc + consumed_units, length: len - consumed_units };
+        env.mem.write(remaining_range_ptr, remaining);
+    }
+
+    used_len > 0 || len == 0
+}
+
 - (id)initWithCharacters:(ConstPtr<unichar>)characters length:(NSUInteger)len {
     assert!(!characters.is_null());
     let num_bytes = len * 2;
