@@ -76,6 +76,44 @@ pub fn CFURLCreateFromFileSystemRepresentation(
     res
 }
 
+pub fn CFURLCreateDataAndPropertiesFromResource(
+    env: &mut Environment,
+    _alloc: CFAllocatorRef,
+    url: CFURLRef,
+    resourceData: MutPtr<CFDataRef>,
+    properties: MutPtr<CFDictionaryRef>,
+    _desiredProperties: CFArrayRef,
+    errorCode: MutPtr<i32>,
+) -> bool {
+    let path: CFStringRef = msg![env; url path];
+    let rust_path = to_rust_string(env, path);
+
+    let file_bytes = match std::fs::read(&*rust_path) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            if !resourceData.is_null() { env.mem.write(resourceData, Ptr::null()); }
+            if !properties.is_null() { env.mem.write(properties, Ptr::null()); }
+            if !errorCode.is_null() { env.mem.write(errorCode, -2); }
+            return false;
+        }
+    };
+
+    if !resourceData.is_null() {
+        let cf_data = CFDataCreate(
+            env,
+            kCFAllocatorDefault,
+            env.mem.host_ptr_to_guest_ptr(file_bytes.as_ptr().cast()).cast(),
+            file_bytes.len().try_into().unwrap(),
+        );
+        env.mem.write(resourceData, cf_data);
+    }
+
+    if !errorCode.is_null() {
+        env.mem.write(errorCode, 0);
+    }
+    true
+}
+
 fn CFURLCreateWithBytes(
     env: &mut Environment,
     allocator: CFAllocatorRef,
@@ -197,6 +235,7 @@ fn CFURLHasDirectoryPath(env: &mut Environment, url: CFURLRef) -> bool {
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLGetFileSystemRepresentation(_, _, _, _)),
     export_c_func!(CFURLCreateFromFileSystemRepresentation(_, _, _, _)),
+    export_c_func!(CFURLCreateDataAndPropertiesFromResource(_, _, _, _, _, _)),
     export_c_func!(CFURLCreateWithBytes(_, _, _, _, _)),
     export_c_func!(CFURLCreateWithFileSystemPath(_, _, _, _)),
     export_c_func!(CFURLCreateWithString(_, _, _)),
