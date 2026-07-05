@@ -107,6 +107,21 @@ fn CFBundleCopyResourceURL(
     msg![env; url copy]
 }
 
+// Dummy locate to rootDir
+fn CFBundleCopyResourceURLForLocalization(
+    env: &mut Environment,
+    bundle: CFBundleRef,
+    resource_name: CFStringRef,
+    resource_type: CFStringRef,
+    sub_dir_name: CFStringRef,
+    _localization_name: CFStringRef,
+) -> CFURLRef {
+    let url: CFURLRef = msg![env; bundle URLForResource:resource_name
+                                          withExtension:resource_type
+                                           subdirectory:sub_dir_name];
+    msg![env; url copy]
+}
+
 pub fn CFBundleCopyBundleLocalizations(env: &mut Environment, bundle: CFBundleRef) -> CFArrayRef {
     let bundle_localizations = env
         .objc
@@ -197,6 +212,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFBundleCopyExecutableURL(_)),
     export_c_func!(CFBundleCopyResourcesDirectoryURL(_)),
     export_c_func!(CFBundleCopyResourceURL(_, _, _, _)),
+    export_c_func!(CFBundleCopyResourceURLForLocalization(_, _, _, _, _)),
     export_c_func!(CFBundleCopyBundleLocalizations(_)),
     export_c_func!(CFBundleCopyPreferredLocalizationsFromArray(_)),
     export_c_func!(CFBundleCopyLocalizedString(_, _, _, _)),
