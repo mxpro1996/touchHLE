@@ -71,7 +71,7 @@ jobs:
       - name: Sanity check tests
         run: cc tests/TestApp_source/cli_tests.m tests/TestApp_source/CGAffineTransform.c tests/TestApp_source/SyncTester.m tests/TestApp_source/RespondsToSelector.m tests/TestApp_source/AutoReleasePoolTest.m tests/TestApp_source/Initialize.m -framework CoreFoundation -framework Foundation -framework CoreGraphics -DDEFINE_ME_WHEN_BUILDING_ON_MACOS -DTestApp_cli_tests_main=main -ObjC && ./a.out
       - name: Build
-        run: cargo build --target x86_64-apple-darwin --release
+        run: cargo build --target x86_64-apple-darwin
         env:
           CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
       - name: Create .app bundle
@@ -246,7 +246,7 @@ jobs:
       env:
         CMAKE: ${{ github.workspace }}\vendor\cmake\bin\cmake
     - name: Build
-      run: cargo build --release
+      run: cargo build
       env:
         CMAKE: ${{ github.workspace }}\vendor\cmake\bin\cmake
     - name: Create bundle
